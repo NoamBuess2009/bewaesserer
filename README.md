@@ -2,7 +2,7 @@
 
 Eine React-Oberfläche mit Python-Steuerung für den Raspberry Pi 5. Die Steuerung schaltet **BCM GPIO 18 (physischer Pin 12)** zweimal täglich für eine einstellbare Dauer ein. **Ground ist physischer Pin 6**.
 
-Das Dashboard bietet einen editierbaren Tagesplan, manuelles Starten und Stoppen, den nächsten Bewässerungstermin, eine Restlaufzeit und einen ausdrücklich gekennzeichneten Demomodus. Es funktioniert auf Desktop und Smartphone. Pflanzenillustration, Icons und Schrift-Fallbacks benötigen keine externen Dienste.
+Das Dashboard bietet einen editierbaren Tagesplan, manuelles Starten und Stoppen, den nächsten Bewässerungstermin, eine Restlaufzeit und einen ausdrücklich gekennzeichneten Demomodus. Unter **Verlauf & Statistik** findest du gespeicherte Durchgänge, tatsächliche Laufzeiten, Tagesdiagramme und CSV-Exporte. Es funktioniert auf Desktop und Smartphone. Pflanzenillustration, Icons und Schrift-Fallbacks benötigen keine externen Dienste.
 
 ## React-Oberfläche starten
 
@@ -123,8 +123,37 @@ Nach Änderungen die Oberfläche erneut mit `npm run build` bauen und `sudo ./in
 | `POST /api/start` | Start mit der gespeicherten Dauer |
 | `POST /api/stop` | Sofort stoppen |
 | `GET /api/status` | Betriebszustand ohne Zeitplan |
+| `GET /api/history?days=7&source=all&limit=20&offset=0` | Verlauf, nach neuestem Beginn sortiert |
+| `GET /api/statistics?days=7` | Heutige, tägliche und gesamte erfasste Laufzeiten |
+| `GET /api/history/export.csv?days=7&source=all` | CSV-Download für Zeitraum und Auslöser |
 
 Die schreibenden JSON-Endpunkte geben den aktualisierten Zeitplan und Status zurück. Die bisherigen Formular-Endpunkte bleiben kompatibel.
+
+## Verlauf und Statistik
+
+Jeder neue Bewässerungsdurchgang wird auf dem Raspberry Pi in **`data/watering.sqlite3`** gespeichert; beim installierten Dienst liegt die Datei unter **`/opt/bewaesserer/data/watering.sqlite3`**. Verlauf und Zeitplan bleiben bei Neustarts und erneutem Installieren erhalten. Ein anderer Datenbankpfad lässt sich mit `BEWAESSERER_HISTORY` festlegen. SQLite gehört zur Python-Standardbibliothek, zusätzliche Datenbankdienste sind nicht nötig.
+
+Ein Eintrag enthält Beginn, Ende, geplante Dauer, tatsächliche Einschaltzeit des GPIOs, den Auslöser (manuell oder Zeitplan) und den Abschlussgrund. Vorzeitiges Stoppen, erneutes Starten während eines laufenden Durchgangs und das Beenden des Dienstes werden jeweils erfasst. Die Laufzeit wird unabhängig von Korrekturen der Systemuhr gemessen.
+
+Beim normalen Herunterfahren wird der aktive Durchgang beendet und gespeichert. Nach einem Stromausfall oder erzwungenen Prozessabbruch wird ein offener Eintrag beim nächsten Start als **unterbrochen** markiert. Da dann kein verlässliches Ende bekannt ist, bleiben Ende und tatsächliche Dauer leer. Solche Einträge und laufende Durchgänge werden nicht in die Laufzeitsummen eingerechnet. Ein Hinweis zeigt an, wenn unterbrochene Einträge vorhanden sind.
+
+Im Dashboard kannst du 7, 30 oder 90 Tage wählen. Kennzahlen zeigen die tatsächliche Dauer und Anzahl für heute, den Zeitraum und insgesamt seit Beginn der Aufzeichnung sowie den Durchschnitt pro Durchgang. Das Tagesdiagramm unterscheidet manuelle und geplante Bewässerung. Durchgänge zählen am Tag ihres Beginns; Laufzeiten über Mitternacht werden auf die jeweiligen Zürcher Kalendertage aufgeteilt. Der Auslöserfilter gilt für die Tabelle und den CSV-Export; die Statistik berücksichtigt beide Auslöser.
+
+Die CSV-Datei enthält alle Einträge des gewählten Zeitraums und Auslösers, auch wenn in der Tabelle erst eine Seite angezeigt wird. Sie verwendet UTF-8 mit BOM, Semikolon-Trennung, Zeitzonenangaben und tatsächliche Dauern in Sekunden. Die Aufzeichnung beginnt mit dieser Version; frühere Durchgänge lassen sich daraus nicht rekonstruieren. Es wird die GPIO-Einschaltzeit erfasst, kein gemessener Wasserdurchfluss.
+
+Im Demomodus werden ausschliesslich selbst gestartete Demo-Durchgänge im Browser gespeichert. Demo-Daten werden getrennt vom echten Raspberry-Pi-Verlauf gehalten. Ein beim Verlassen oder Neuladen noch laufender Demo-Durchgang bekommt eine unbekannte Dauer.
+
+Nach dem Übertragen der Änderungen auf den Pi installierst du das Update im dortigen Projektordner:
+
+```bash
+cd ~/bewaesserer
+npm ci
+npm run build
+sudo bash install.sh
+sudo systemctl restart bewaesserer
+```
+
+Der installierte Dienst liefert das aktualisierte Dashboard auf Port 8080 aus. Beim Betrieb mit `npm run dev` wird die React-Oberfläche automatisch neu geladen; der Python-Dienst muss für das neue Protokoll dennoch aktualisiert und neu gestartet werden.
 
 ## Entwicklung ohne Raspberry Pi
 
@@ -153,4 +182,4 @@ TEST_PYTHON=.venv/bin/python npm run test:ui
 
 Für diese Tests müssen Port 3000 und 8080 frei sein. Tests nie gegen eine echte angeschlossene Bewässerungsanlage ausführen.
 
-`npm test` prüft die Berechnung des nächsten Termins, einschliesslich der Zeitumstellungen in Zürich.
+`npm test` prüft die Berechnung des nächsten Termins und der Demo-Statistik, einschliesslich der Zeitumstellungen in Zürich. Die Python-Tests prüfen zusätzlich Speicherung, Wiederanlauf, tatsächliche Laufzeiten, Datenbankfehler und die Verlaufs-API. Die Browser-Tests testen auch Verlauf, Filter, CSV-Download und die Trennung von Demo- und Anlagendaten.

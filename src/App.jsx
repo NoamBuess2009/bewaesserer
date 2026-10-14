@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   ArrowRight, ArrowUpRight, CalendarDays, Check, ChevronRight, CircleHelp,
-  Clock3, Droplets, Leaf, LayoutDashboard, LoaderCircle, Menu, Moon, PlugZap,
+  Clock3, Droplets, History, Leaf, LayoutDashboard, LoaderCircle, Menu, Moon, PlugZap,
   Radio, Settings2, ShieldCheck, Sprout, Square, Sun, Timer, Wifi, WifiOff, X,
 } from 'lucide-react';
 import Botanical from './Botanical.jsx';
 import useWatering from './useWatering.js';
+import useHistory from './useHistory.js';
+import HistoryPanel from './HistoryPanel.jsx';
 import { apiRequest, clockDuration, defaultApiUrl, durationLabel, nextRun, normalizeApiUrl, readStorage, writeStorage } from './lib.js';
 
 function Dialog({ title, children, close, className = '' }) {
@@ -73,7 +75,8 @@ function StatCard({ icon: Icon, label, value, unit, detail, color }) {
 export default function App() {
   const [apiUrl, setApiUrl] = useState(() => readStorage('gruenzeit-api', defaultApiUrl()));
   const [demo, setDemo] = useState(() => readStorage('gruenzeit-demo', false) === true);
-  const { settings, status, connection, busy, lastSync, clockOffset, act } = useWatering(apiUrl, demo);
+  const { settings, status, connection, busy, lastSync, clockOffset, act, demoHistory } = useWatering(apiUrl, demo);
+  const analytics = useHistory(apiUrl, demo, status, demoHistory);
   const [draft, setDraft] = useState(settings);
   const [now, setNow] = useState(new Date());
   const [modal, setModal] = useState(null);
@@ -110,7 +113,8 @@ export default function App() {
     setMobileMenu(false);
     if (target === 'connection' || target === 'help') { setModal(target); return; }
     setNav(target);
-    if (target === 'schedule') scheduleRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (target === 'history') document.getElementById('verlauf').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    else if (target === 'schedule') scheduleRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
     else window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -151,6 +155,7 @@ export default function App() {
       <nav aria-label="Hauptnavigation">
         <button className={`nav-item ${nav === 'overview' ? 'selected' : ''}`} onClick={() => navigate('overview')}><LayoutDashboard size={19}/>Übersicht{nav === 'overview' && <span className="nav-indicator"/>}</button>
         <button className={`nav-item ${nav === 'schedule' ? 'selected' : ''}`} onClick={() => navigate('schedule')}><CalendarDays size={19}/>Zeitplan{nav === 'schedule' && <span className="nav-indicator"/>}</button>
+        <button className={`nav-item ${nav === 'history' ? 'selected' : ''}`} onClick={() => navigate('history')}><History size={19}/>Verlauf & Statistik{nav === 'history' && <span className="nav-indicator"/>}</button>
         <button className="nav-item" onClick={() => navigate('connection')}><PlugZap size={19}/>Verbindung<ArrowUpRight size={15} className="nav-trailing"/></button>
       </nav>
       <div className="sidebar-bottom">
@@ -188,9 +193,9 @@ export default function App() {
           </article>
         </section>
 
-        <section className="stats-grid" aria-label="Dein täglicher Rhythmus"><StatCard icon={Droplets} label="Ein guter Rhythmus" value="2" unit="× täglich" detail="Morgens und abends versorgt"/>
-          <StatCard icon={Timer} label="Zeit zum Auftanken" value={clockDuration(settings.duration_seconds)} unit="Min." detail="Dauer pro Bewässerung" color="sage"/>
-          <StatCard icon={Sprout} label="Für deinen Garten" value={clockDuration(settings.duration_seconds * 2)} unit="Min. / Tag" detail="Geplante tägliche Bewässerung" color="sand"/></section>
+        <section className="stats-grid" aria-label="Dein geplanter Rhythmus"><StatCard icon={Droplets} label="Geplante Durchgänge" value={new Set(settings.times).size} unit="× täglich" detail="Dein gespeicherter Zeitplan"/>
+          <StatCard icon={Timer} label="Geplante Laufzeit" value={clockDuration(settings.duration_seconds)} unit="Min." detail="Dauer pro Bewässerung" color="sage"/>
+          <StatCard icon={Sprout} label="Geplant pro Tag" value={clockDuration(settings.duration_seconds * new Set(settings.times).size)} unit="Min. / Tag" detail="Dein täglicher Bewässerungsplan" color="sand"/></section>
 
         <section className="lower-grid">
           <article className="schedule-card" id="zeitplan" ref={scheduleRef}><div className="section-heading"><div><h2>Dein täglicher Rhythmus</h2><p>Zwei kleine Auszeiten. Jeden Tag.</p></div><span className="subtle-badge"><span/>Täglich</span></div>
@@ -204,6 +209,12 @@ export default function App() {
 
           <article className="garden-note"><div className="note-doodle"><Sprout size={45} strokeWidth={1.15}/><span className="doodle-spark">✧</span><span className="doodle-dot"/></div><span className="eyebrow">KLEINER GARTENMOMENT</span><h2>Gute Dinge<br/>brauchen einen<br/><em>guten Rhythmus.</em></h2><p>Regelmässige Bewässerung, ganz nach deinem Plan. Deine Steuerung kümmert sich darum – auch wenn du gerade anderes im Kopf hast.</p><button onClick={() => setModal('help')}>So funktioniert’s<ArrowUpRight size={16}/></button><span className="note-bottom"><Leaf size={14}/>Mit Liebe zum Grünen.</span></article>
         </section>
+
+        <HistoryPanel history={analytics.history} statistics={analytics.statistics} loading={analytics.loading}
+          error={analytics.error || status.history_error} days={analytics.days} onDaysChange={analytics.setDays}
+          source={analytics.source} onSourceChange={analytics.setSource} onLoadMore={analytics.loadMore}
+          onExport={async () => { try { await analytics.exportCsv(); } catch { notify('Der CSV-Export konnte nicht heruntergeladen werden.', true); } }}
+          demo={demo} connected={connected}/>
 
         <footer className="page-footer"><span><Sprout size={15}/>grünzeit<span className="footer-dot">.</span><span className="footer-separator">/</span>Ein bisschen Fürsorge. Jeden Tag.</span><span>{demo ? 'Demo · keine echte Anlage verbunden' : connected ? <><i className="status-dot online"/>Live mit deiner Anlage verbunden</> : <><i className="status-dot offline"/>Wartet auf deine Anlage</>}</span></footer>
       </main>

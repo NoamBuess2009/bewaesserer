@@ -7,14 +7,14 @@ test('real API: save a schedule, start and automatically stop', async ({ page, r
   await page.getByLabel('Erste Bewässerungszeit').fill('06:15');
   await page.getByLabel('Wie lange darf’s sein?').fill('2');
   await page.getByRole('button', { name: 'Zeitplan speichern' }).click();
-  await expect(page.getByRole('status')).toContainText('auf der Anlage gespeichert');
+  await expect(page.locator('.toast')).toContainText('auf der Anlage gespeichert');
   await expect.poll(async () => (await (await request.get('http://127.0.0.1:8080/api/state')).json()).settings.times[0]).toBe('06:15');
   await page.getByRole('button', { name: 'Jetzt bewässern' }).click();
   await expect(page.getByRole('button', { name: 'Bewässerung stoppen' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Jetzt bewässern' })).toBeVisible({ timeout: 10000 });
   await page.getByRole('button', { name: 'Jetzt bewässern' }).click();
   await page.getByRole('button', { name: 'Bewässerung stoppen' }).click();
-  await expect(page.getByRole('status')).toContainText('gestoppt');
+  await expect(page.locator('.toast')).toContainText('gestoppt');
   const state = await (await request.get('http://127.0.0.1:8080/api/state')).json();
   expect(state.status.watering).toBe(false);
   await request.put('http://127.0.0.1:8080/api/settings', { data: { times: ['07:00', '19:00'], duration_seconds: 150 } });
@@ -53,7 +53,7 @@ test('demo works independently, persists edits and fits a phone', async ({ page 
   await page.getByRole('button', { name: 'Hinweis schliessen' }).click();
   await page.screenshot({ path: 'test-results/dashboard-mobile.png', fullPage: true });
   await page.getByRole('button', { name: 'Menü öffnen' }).click();
-  await page.getByRole('button', { name: 'Zeitplan', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Hauptnavigation' }).getByRole('button', { name: 'Zeitplan', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Dein täglicher Rhythmus' })).toBeInViewport();
   expect(errors).toEqual([]);
 });

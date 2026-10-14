@@ -13,7 +13,9 @@ from test_app import FakeOutput
 def api(tmp_path, monkeypatch):
     monkeypatch.setenv("BEWAESSERER_CONFIG", str(tmp_path / "settings.json"))
     clock = [datetime(2026, 10, 14, 10, 0, tzinfo=ZoneInfo("Europe/Zurich"))]
-    controller = WateringController(output=FakeOutput(), now=lambda: clock[0])
+    initial = clock[0]
+    controller = WateringController(output=FakeOutput(), now=lambda: clock[0],
+                                   monotonic=lambda: (clock[0] - initial).total_seconds())
     client = create_app(controller, start_scheduler=False).test_client()
     yield client, controller, clock
     controller.close()

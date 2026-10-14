@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import atexit
+import csv
+import io
 import os
 import re
+import sqlite3
 from dataclasses import asdict
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo
 
-from flask import Flask, jsonify, redirect, request, url_for
+from flask import Flask, Response, jsonify, redirect, request, url_for
 
 from .config import Settings, load_settings, save_settings
 from .controller import WateringController
@@ -93,7 +98,10 @@ def create_app(controller: WateringController | None = None, start_scheduler: bo
 
     @app.post("/api/start")
     def api_start():
-        watering.start(load_settings().duration_seconds)
+        try:
+            watering.start(load_settings().duration_seconds)
+        except sqlite3.Error:
+            return jsonify(error="Der Verlauf konnte nicht gespeichert werden. Der Start wurde nicht ausgeführt."), 503
         return state()
 
     @app.post("/api/stop")
@@ -127,5 +135,71 @@ def create_app(controller: WateringController | None = None, start_scheduler: bo
     @app.get("/api/status")
     def api_status():
         return jsonify(watering.status())
+
+    def integer_arg(name, default, minimum, maximum):
+        try:
+            value = int(request.args.get(name, default))
+        except (TypeError, ValueError):
+            raise ValueError(f"Ungültiger Parameter: {name}.")
+        if not minimum <= value <= maximum:
+            raise ValueError(f"{name} muss zwischen {minimum} und {maximum} liegen.")
+        return value
+
+    def history_options():
+        source = request.args.get("source", "all")
+        if source not in {"all", "manual", "schedule"}:
+            raise ValueError("Unbekannter Auslöser.")
+        return {"days": integer_arg("days", 7, 1, 90), "source": source,
+                "now": datetime.fromisoformat(watering.status()["server_time"])}
+
+    @app.get("/api/history")
+    def api_history():
+        try:
+            options = history_options()
+            limit = integer_arg("limit", 20, 1, 500)
+            offset = integer_arg("offset", 0, 0, 10000000)
+            return jsonify(watering.history.list_runs(limit=limit, offset=offset, **options))
+        except ValueError as error:
+            return jsonify(error=str(error)), 400
+        except sqlite3.Error:
+            return jsonify(error="Der Bewässerungsverlauf konnte nicht gelesen werden."), 503
+
+    @app.get("/api/statistics")
+    def api_statistics():
+        try:
+            days = integer_arg("days", 7, 1, 90)
+            now = datetime.fromisoformat(watering.status()["server_time"])
+            return jsonify(watering.history.statistics(now, days))
+        except ValueError as error:
+            return jsonify(error=str(error)), 400
+        except sqlite3.Error:
+            return jsonify(error="Die Statistik konnte nicht gelesen werden."), 503
+
+    @app.get("/api/history/export.csv")
+    def api_history_export():
+        try:
+            options = history_options()
+            output = io.StringIO(newline="")
+            output.write("\ufeff")
+            writer = csv.writer(output, delimiter=";")
+            writer.writerow(["Beginn", "Ende", "Geplante Dauer (Sekunden)",
+                             "Tatsächliche Dauer (Sekunden)", "Auslöser", "Ergebnis"])
+            labels = {"running": "Läuft", "completed": "Automatisch beendet", "stopped": "Gestoppt",
+                      "restarted": "Neu gestartet", "shutdown": "Dienst beendet",
+                      "interrupted": "Unterbrochen – Dauer unbekannt"}
+            timezone = ZoneInfo("Europe/Zurich")
+            for entry in watering.history.list_runs(limit=None, **options)["entries"]:
+                started = datetime.fromisoformat(entry["started_at"]).astimezone(timezone).isoformat()
+                ended = datetime.fromisoformat(entry["ended_at"]).astimezone(timezone).isoformat() if entry["ended_at"] else ""
+                writer.writerow([started, ended, entry["planned_duration_seconds"],
+                                 "" if entry["actual_duration_seconds"] is None else round(entry["actual_duration_seconds"], 3),
+                                 "Zeitplan" if entry["source"] == "schedule" else "Manuell", labels[entry["outcome"]]])
+            filename = f"bewaesserung-{options['now'].date().isoformat()}.csv"
+            return Response(output.getvalue(), content_type="text/csv; charset=utf-8",
+                            headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+        except ValueError as error:
+            return jsonify(error=str(error)), 400
+        except sqlite3.Error:
+            return jsonify(error="Der Verlauf konnte nicht exportiert werden."), 503
 
     return app

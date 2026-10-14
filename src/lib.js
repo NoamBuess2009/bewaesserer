@@ -71,7 +71,7 @@ export function normalizeApiUrl(value) {
   return url.href.replace(/\/$/, '');
 }
 
-export async function apiRequest(base, path, options = {}) {
+export async function jsonRequest(base, path, options = {}) {
   const response = await fetch(`${base}/api${path}`, {
     ...options,
     headers: { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers },
@@ -80,6 +80,11 @@ export async function apiRequest(base, path, options = {}) {
   });
   const data = await response.json().catch(() => null);
   if (!response.ok) throw new Error(data?.error || 'Die Anlage konnte die Anfrage nicht ausführen.');
+  return data;
+}
+
+export async function apiRequest(base, path, options = {}) {
+  const data = await jsonRequest(base, path, options);
   if (!data?.settings || typeof data?.status?.watering !== 'boolean') {
     throw new Error('Diese Adresse liefert keine Grünzeit-Steuerung. Bitte das Python-Backend aktualisieren.');
   }
