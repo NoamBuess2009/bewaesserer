@@ -1,0 +1,23 @@
+[Unit]
+Description=Automatische Bewaesserungsanlage
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+SupplementaryGroups=gpio
+WorkingDirectory=/opt/bewaesserer
+Environment=TZ=Europe/Zurich
+Environment=BEWAESSERER_CONFIG=/opt/bewaesserer/data/settings.json
+Environment=GPIOZERO_PIN_FACTORY=lgpio
+ExecStart=/opt/bewaesserer/.venv/bin/waitress-serve --host=0.0.0.0 --port=8080 --call bewaesserer.app:create_app
+Restart=on-failure
+RestartSec=5
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
+
