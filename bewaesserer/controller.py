@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 import threading
 from datetime import datetime
@@ -28,6 +29,7 @@ class WateringController:
         self._last_scheduled_key: str | None = None
         self.started_at: datetime | None = None
         self.last_finished_at: datetime | None = None
+        self.duration_seconds = 0
 
     @property
     def is_watering(self) -> bool:
@@ -40,6 +42,7 @@ class WateringController:
                 self._stop_timer.cancel()
             self.output.on()
             self.started_at = self._now()
+            self.duration_seconds = duration_seconds
             self._stop_timer = threading.Timer(duration_seconds, self.stop)
             self._stop_timer.daemon = True
             self._stop_timer.start()
@@ -78,9 +81,18 @@ class WateringController:
         self.output.close()
 
     def status(self) -> dict:
-        return {
-            "watering": self.is_watering,
-            "started_at": self.started_at.isoformat(timespec="seconds") if self.started_at else None,
-            "last_finished_at": self.last_finished_at.isoformat(timespec="seconds") if self.last_finished_at else None,
-        }
+        with self._lock:
+            now = self._now()
+            watering = self.is_watering
+            remaining = 0
+            if watering and self.started_at:
+                remaining = max(0, math.ceil(self.duration_seconds - (now - self.started_at).total_seconds()))
+            return {
+                "watering": watering,
+                "started_at": self.started_at.isoformat(timespec="seconds") if self.started_at else None,
+                "last_finished_at": self.last_finished_at.isoformat(timespec="seconds") if self.last_finished_at else None,
+                "duration_seconds": self.duration_seconds,
+                "remaining_seconds": remaining,
+                "server_time": now.isoformat(timespec="milliseconds"),
+            }
 

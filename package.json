@@ -1,0 +1,25 @@
+{
+  "name": "bewaesserer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "start": "serve -s dist -l 3000",
+    "test": "node --test tests/frontend/*.test.js",
+    "preview": "serve -s dist -l 3000",
+    "test:ui": "playwright test"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "serve": "^14.2.4",
+    "vite": "^7.0.0"
+  }
+}
