@@ -6,7 +6,7 @@ Das Dashboard bietet einen editierbaren Tagesplan, manuelles Starten und Stoppen
 
 ## React-Oberfläche starten
 
-Voraussetzung: Node.js 22.12+ (oder 20.19+).
+Zum Bauen: Node.js 22.12+; empfohlen ist Node.js 24 LTS. Einen bereits gebauten `dist/`-Ordner kann der Python-Dienst auch ohne Node.js ausliefern.
 
 ```bash
 npm ci
@@ -59,14 +59,47 @@ Wenn dein Relais **aktiv-LOW** arbeitet, ergänze im systemd-Service `Environmen
 
 ## Installation auf Raspberry Pi OS
 
+Kopiere den aktuellen Projektordner auf den Pi, beispielsweise nach `~/Bewaesserer`. Für den Pi 5 verwenden die Anforderungen `gpiozero==2.0.1.post3`, das den [GPIO-Chip-Fix für neuere Pi-5-Kernel](https://gpiozero.readthedocs.io/en/stable/changelog.html#release-2-0-1-post3-2026-07-27) enthält.
+
+Baue zuerst die React-Oberfläche. Das geht entweder auf dem Mac (danach den erzeugten `dist/`-Ordner mitkopieren) oder direkt auf dem Pi mit Node.js 22.12+:
+
 ```bash
-git clone https://github.com/DEIN-NAME/bewaesserer.git
-cd bewaesserer
-chmod +x install.sh
-sudo ./install.sh
+cd ~/Bewaesserer
+npm ci
+npm run build
 ```
 
-Danach zeigt das Installationsskript die Adresse der Python-Steuerung an, üblicherweise `http://raspberrypi.local:8080` oder `http://<IP-DES-RASPI>:8080`. Der Dienst startet künftig automatisch beim Booten. Baue die React-Oberfläche vor der Installation, wenn sie zusätzlich direkt über den Python-Dienst erreichbar sein soll. Standardplan: **07:00 und 19:00 Uhr**, jeweils **2,5 Minuten (150 Sekunden)**.
+Fehlt auf dem Pi eine passende Node-Version, lässt sich Node.js 24 mit [nvm](https://github.com/nvm-sh/nvm#installing-and-updating) installieren. Diese Schritte sind bei einem bereits auf dem Mac gebauten und mitkopierten `dist/` nicht nötig:
+
+```bash
+sudo apt update
+sudo apt install -y curl ca-certificates
+export NVM_DIR="$HOME/.nvm"
+curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh | bash
+. "$NVM_DIR/nvm.sh"
+nvm install 24
+```
+
+Installiere anschliessend auf dem Pi den Python-Dienst:
+
+```bash
+cd ~/Bewaesserer
+sudo bash install.sh
+sudo systemctl restart bewaesserer
+hostname -I
+```
+
+Öffne auf einem Computer oder Handy im selben Netzwerk **`http://<PI-IP>:8080`**. Dieser Dienst liefert die React-Oberfläche und die API gemeinsam aus und startet automatisch beim Booten. Wenn `dist/` bereits vom Mac mitkopiert wurde, braucht der Pi dafür keine Node.js-Installation.
+
+Für die separat gehostete Variante auf Port 3000 starte im Projektordner mit installierten Node-Abhängigkeiten zusätzlich:
+
+```bash
+npm start
+```
+
+Das entspricht `serve -s dist -l 3000`. Öffne dann **`http://<PI-IP>:3000`**. Dieser zusätzliche Prozess läuft nur, solange das Terminal offen bleibt; der Python-Dienst läuft unabhängig davon weiter.
+
+Standardplan: **07:00 und 19:00 Uhr**, jeweils **2,5 Minuten (150 Sekunden)**.
 
 ## Bedienung und Wartung
 
